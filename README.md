@@ -9,8 +9,8 @@ open which is always emitting debug output.
 Example (proposed API):
 
 ```
-  tailpattern '/tmp/tsserver_*log'
-  tailpattern -e '/tmp/tsserver_(.*)log\1'
+$ tailpattern '/tmp/tsserver_*log'
+$ tailpattern -e '/tmp/tsserver_(.*)log\1'
 ```
 
 The first is glob based, the second uses regular expressions and capture
