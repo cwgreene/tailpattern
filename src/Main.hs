@@ -3,9 +3,9 @@ import System.IO
 
 import System.INotify
 
-eventHandler :: Event -> IO()
-eventHandler e@(Created isDirectory filePath) = handleCreate e
-eventHandler e = return ()
+eventHandler :: INotify -> [IO WatchDescriptor] -> Event -> IO()
+eventHandler inotify e@(Created isDirectory filePath) = print e
+eventHandler inotify e = return ()
 
 main = do
   inotify <- initINotify
@@ -15,7 +15,7 @@ main = do
           inotify
           [Open, Close, Access, Modify, Move, Create]
           watchDirectory
-          eventHandler
+          (eventHandler inotify wds)
   print wd
   putStrLn "Listens"
   getLine

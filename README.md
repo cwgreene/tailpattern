@@ -1,4 +1,4 @@
-Tailpattern
+# Tailpattern
 
 Tails files of a given pattern in a directory, including files that don't exist yet.
 
