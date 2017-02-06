@@ -12,7 +12,7 @@ handler :: State -> Event -> State
 handler s e@(Created isDirectory filePath) = Map.insert filePath "fileHandleHere" s
 handler s e = s
 
-eventHandler :: MVar (Map.Map String String) -> INotify -> Event -> IO()
+eventHandler :: MVar State -> INotify -> Event -> IO()
 eventHandler mvar inotify e = do
   state <- takeMVar mvar
   print e
