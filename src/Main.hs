@@ -6,13 +6,18 @@ import System.IO
 
 import System.INotify
 
+type State = Map.Map String String
+
+handler :: State -> Event -> State
+handler s e@(Created isDirectory filePath) = Map.insert filePath "fileHandleHere" s
+handler s e = s
+
 eventHandler :: MVar (Map.Map String String) -> INotify -> Event -> IO()
-eventHandler mvar inotify e@(Created isDirectory filePath) = do
+eventHandler mvar inotify e = do
   state <- takeMVar mvar
   print e
-  let newState = Map.insert filePath "fileHandleHere" state
+  let newState = handler state e
   putMVar mvar newState
-eventHandler mvar inotify e = return ()
 
 main = do
   inotify <- initINotify
