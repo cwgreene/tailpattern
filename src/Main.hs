@@ -1,4 +1,5 @@
 import Control.Concurrent.MVar
+import qualified System.FilePath.Glob as Glob
 import qualified Data.Map.Strict as Map
 
 import System.Directory
@@ -8,8 +9,22 @@ import System.INotify
 
 type State = Map.Map String String
 
+patternFilter :: Glob.Pattern -> String -> State -> (State -> String -> State) -> State
+patternFilter pattern filePath s handler =
+  if (Glob.match pattern filePath) then
+    handler s filePath
+  else
+    s
+
+pat = Glob.compile "doom*"
+
 handler :: State -> Event -> State
-handler s e@(Created isDirectory filePath) = Map.insert filePath "fileHandleHere" s
+handler s e@(Created isDirectory filePath) =
+  patternFilter pat filePath s $ \s fp -> Map.insert fp "fileHandleHere" s
+handler s e@(Modified isDirectory maybeFilePath) =
+  case maybeFilePath of
+    Nothing -> s
+    Just filePath -> patternFilter pat filePath s $ \s fp -> Map.insert fp "modified" s
 handler s e = s
 
 eventHandler :: MVar State -> INotify -> Event -> IO()
