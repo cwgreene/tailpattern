@@ -38,7 +38,7 @@ main = do
   args <- getArgs
   if length args /= 2 then
     -- TODO: Make this not silly.
-    fail "Invalid Number of Supplied Arguments"
+    fail "Usage: tailpattern DIRECTORY PATTERN"
   else
     -- Not what one would expect in something like Python.
     return ()
