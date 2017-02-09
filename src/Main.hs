@@ -11,7 +11,7 @@ import System.INotify
 type State = Map.Map String String
 type EventTypeHandler = State -> Event -> State
 
-patternFilter :: Glob.Pattern -> String -> State -> (State -> String -> State) -> State
+patternFilter :: Glob.Pattern -> String -> State -> (EventTypeHandler) -> State
 patternFilter pattern filePath s handler =
   if (Glob.match pattern filePath) then
     handler s filePath
@@ -28,10 +28,10 @@ eventHandler pattern s e@(Modified isDirectory maybeFilePath) =
 eventHandler p s e = s
 
 inotifyCallback :: MVar State -> INotify -> EventTypeHandler -> Event -> IO()
-inotifyCallback mvar inotify eventHandler e = do
+inotifyCallback mvar inotify eventTypeHandler e = do
   state <- takeMVar mvar
   print e
-  let newState = eventHandler state e
+  let newState = eventTypeHandler state e
   putMVar mvar newState
 
 main = do
