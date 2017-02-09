@@ -18,20 +18,20 @@ patternFilter pattern filePath s handler =
   else
     s
 
-handler :: Glob.Pattern -> State -> Event -> State
-handler pattern s e@(Created isDirectory filePath) =
+eventHandler :: Glob.Pattern -> EventTypeHandler
+eventHandler pattern s e@(Created isDirectory filePath) =
   patternFilter pattern filePath s $ \s fp -> Map.insert fp "fileHandleHere" s
-handler pattern s e@(Modified isDirectory maybeFilePath) =
+eventHandler pattern s e@(Modified isDirectory maybeFilePath) =
   case maybeFilePath of
     Nothing -> s
     Just filePath -> patternFilter pattern filePath s $ \s fp -> Map.insert fp "modified" s
-handler p s e = s
+eventHandler p s e = s
 
-eventHandler :: MVar State -> INotify -> EventTypeHandler -> Event -> IO()
-eventHandler mvar inotify handler e = do
+inotifyCallback :: MVar State -> INotify -> EventTypeHandler -> Event -> IO()
+inotifyCallback mvar inotify eventHandler e = do
   state <- takeMVar mvar
   print e
-  let newState = handler state e
+  let newState = eventHandler state e
   putMVar mvar newState
 
 main = do
@@ -46,15 +46,12 @@ main = do
   let patternGlob = args !! 1
   let pattern = Glob.compile patternGlob
   inotify <- initINotify
-  print inotify
   mvar <- newMVar Map.empty
   wd <- addWatch
           inotify
           [Open, Close, Access, Modify, Move, Create]
           watchDirectory
-          (eventHandler mvar inotify (handler pattern))
-  print wd
-  putStrLn "Listens"
+          (inotifyCallback mvar inotify (eventHandler pattern))
   getLine
   files <- takeMVar mvar
   putStrLn $ show $ Map.keys files
