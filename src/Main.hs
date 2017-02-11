@@ -10,8 +10,9 @@ import System.INotify
 
 type State = Map.Map String String
 type EventTypeHandler = State -> Event -> State
+type EventFileHandler = State -> String -> State
 
-patternFilter :: Glob.Pattern -> String -> State -> (EventTypeHandler) -> State
+patternFilter :: Glob.Pattern -> String -> State -> (EventFileHandler) -> State
 patternFilter pattern filePath s handler =
   if (Glob.match pattern filePath) then
     handler s filePath
