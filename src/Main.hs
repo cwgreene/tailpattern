@@ -2,13 +2,17 @@ import Control.Concurrent.MVar
 import qualified System.FilePath.Glob as Glob
 import qualified Data.Map.Strict as Map
 
+import Data.Either
 import System.Directory
 import System.Environment
 import System.IO
+import System.IO.Error
 
 import System.INotify
 
-type State = Map.Map String String
+data FileState = FS Int (Handle)
+
+data State = State String (Map.Map String FileState)
 type EventTypeHandler = State -> Event -> IO State
 type EventFileHandler = State -> String -> IO State
 
@@ -20,32 +24,41 @@ patternFilter pattern filePath s handler =
     return s
 
 handleNewFile :: EventFileHandler
-handleNewFile oldState path = do
-    let newState = Map.insert path "fileHandleHere" oldState
-    -- cat file here, and update length of file
-    -- need to change state to Map.Map String (FileHandle length)
-    return newState
+handleNewFile (State root stateMap) fileName = do
+  let path = root ++ "/" ++ fileName
+  putStrLn ("saw: " ++ path)
+  fileHandle <- openFile path ReadMode
+  contents <- hGetContents fileHandle
+  let len = length contents
+  putStr contents
+  let newState = (State root (Map.insert path (FS len fileHandle) stateMap))
+  return newState
 
 handleUpdatedFile :: EventFileHandler
 handleUpdatedFile oldState path = do
-    let newState = oldState
-    -- find position from the old state seek to it, and resume reading to EOF
-    -- update state to new length
-    return newState
+  let newState = oldState
+  putStrLn $ "Updating file: " ++ path
+  -- find position from the old state seek to it, and resume reading to EOF
+  -- update state to new length
+  return newState
 
 eventHandler :: Glob.Pattern -> EventTypeHandler
 eventHandler pattern s e@(Created isDirectory filePath) =
-  patternFilter pattern filePath s $ \s fp -> return $ Map.insert fp "fileHandleHere" s
+  patternFilter pattern filePath s handleNewFile
 eventHandler pattern s e@(Modified isDirectory maybeFilePath) =
   case maybeFilePath of
     Nothing -> return s
-    Just filePath -> patternFilter pattern filePath s $ \s fp -> return $ Map.insert fp "modified" s
+    Just filePath -> patternFilter pattern filePath s handleUpdatedFile
 eventHandler p s e = return s
 
 inotifyCallback :: MVar State -> INotify -> EventTypeHandler -> Event -> IO()
 inotifyCallback mvar inotify eventTypeHandler e = do
   oldState <- takeMVar mvar
-  newState <- eventTypeHandler oldState e
+  result <- tryIOError (eventTypeHandler oldState e)
+  newState <-
+        case result of
+            (Left error)  -> (putStrLn $ show error) >> return oldState
+            (Right nextState) -> return nextState
   putMVar mvar newState
 
 main = do
@@ -60,13 +73,13 @@ main = do
   let patternGlob = args !! 1
   let pattern = Glob.compile patternGlob
   inotify <- initINotify
-  mvar <- newMVar Map.empty
+  mvar <- newMVar (State watchDirectory Map.empty)
   wd <- addWatch
           inotify
           [Open, Close, Access, Modify, Move, Create]
           watchDirectory
           (inotifyCallback mvar inotify (eventHandler pattern))
   getLine
-  files <- takeMVar mvar
+  (State root files) <- takeMVar mvar
   putStrLn $ show $ Map.keys files
   removeWatch wd
