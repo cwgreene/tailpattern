@@ -25,17 +25,9 @@ patternFilter pattern filePath s handler =
 
 fullPath root path = root ++ "/" ++ path
 
-
-advanceFileState path (FS oldPos) (State root stateMap) = do
- -- getContents closes the file. :(
- -- TODO: don't use getContents, and perform a tryCatch instead
- -- allowing us to keep the fileHandle around.
- -- TODO: Figure out if the above is worth it. What's the cost
- -- of doing hSeek? Do we get any benefit? Can we fstat to avoid
- -- catching a hGetChar execption? Or can we just block the thread
- -- instead? (This would require a mvar per file, so not in the
- -- current arch. Possible drawback: file handle exhaustion.
- -- Also, if the file is cached, then seeking is just a memory lookup.
+advanceFileState (State root stateMap) fileName = do
+  let path = fullPath root fileName
+  let (FS oldPos) = Map.findWithDefault (FS 0) path stateMap
   fileHandle <- openFile path ReadMode
   -- What if it was just a timestamp update? What if it's shorter now?
   hSeek fileHandle AbsoluteSeek (oldPos) -- HACK! Probably need to trycatch this.
@@ -48,25 +40,18 @@ advanceFileState path (FS oldPos) (State root stateMap) = do
   return newState
 
 handleNewFile :: EventFileHandler
-handleNewFile state@(State root stateMap) fileName = do
-  let path = fullPath root fileName
-  newState <- advanceFileState path (FS 0) state
-  return newState
+handleNewFile = advanceFileState
 
 handleUpdatedFile :: EventFileHandler
-handleUpdatedFile state@(State root map) fileName = do
-  let path = fullPath root fileName
-  let fileState = Map.findWithDefault (FS 0) path map
-  newState <- advanceFileState path fileState state
-  return newState
+handleUpdatedFile = advanceFileState
 
 eventHandler :: Glob.Pattern -> EventTypeHandler
 eventHandler pattern s e@(Created isDirectory filePath) =
   patternFilter pattern filePath s handleNewFile
-eventHandler pattern s e@(Modified isDirectory maybeFilePath) =
-  case maybeFilePath of
+eventHandler pattern s e@(Modified isDirectory maybeFileName) =
+  case maybeFileName of
     Nothing -> return s
-    Just filePath -> patternFilter pattern filePath s handleUpdatedFile
+    Just fileName -> patternFilter pattern fileName s handleUpdatedFile
 eventHandler p s e = return s
 
 inotifyCallback :: MVar State -> INotify -> EventTypeHandler -> Event -> IO()
