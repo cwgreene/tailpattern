@@ -10,7 +10,7 @@ import System.IO.Error
 
 import System.INotify
 
-data FileState = FS Int (Handle)
+data FileState = FS Integer
 
 data State = State String (Map.Map String FileState)
 type EventTypeHandler = State -> Event -> IO State
@@ -23,23 +23,41 @@ patternFilter pattern filePath s handler =
   else
     return s
 
-handleNewFile :: EventFileHandler
-handleNewFile (State root stateMap) fileName = do
-  let path = root ++ "/" ++ fileName
-  putStrLn ("saw: " ++ path)
+fullPath root path = root ++ "/" ++ path
+
+
+advanceFileState path (FS oldPos) (State root stateMap) = do
+ -- getContents closes the file. :(
+ -- TODO: don't use getContents, and perform a tryCatch instead
+ -- allowing us to keep the fileHandle around.
+ -- TODO: Figure out if the above is worth it. What's the cost
+ -- of doing hSeek? Do we get any benefit? Can we fstat to avoid
+ -- catching a hGetChar execption? Or can we just block the thread
+ -- instead? (This would require a mvar per file, so not in the
+ -- current arch. Possible drawback: file handle exhaustion.
+ -- Also, if the file is cached, then seeking is just a memory lookup.
   fileHandle <- openFile path ReadMode
+  -- What if it was just a timestamp update? What if it's shorter now?
+  hSeek fileHandle AbsoluteSeek (oldPos) -- HACK! Probably need to trycatch this.
   contents <- hGetContents fileHandle
-  let len = length contents
+  let len = toInteger $ length contents
   putStr contents
-  let newState = (State root (Map.insert path (FS len fileHandle) stateMap))
+  hFlush stdout -- Otherwise it looks like it buffers to newline.
+  let newState = (State root (Map.insert path (FS (len + oldPos)) stateMap))
+  hClose fileHandle
+  return newState
+
+handleNewFile :: EventFileHandler
+handleNewFile state@(State root stateMap) fileName = do
+  let path = fullPath root fileName
+  newState <- advanceFileState path (FS 0) state
   return newState
 
 handleUpdatedFile :: EventFileHandler
-handleUpdatedFile oldState path = do
-  let newState = oldState
-  putStrLn $ "Updating file: " ++ path
-  -- find position from the old state seek to it, and resume reading to EOF
-  -- update state to new length
+handleUpdatedFile state@(State root map) fileName = do
+  let path = fullPath root fileName
+  let fileState = Map.findWithDefault (FS 0) path map
+  newState <- advanceFileState path fileState state
   return newState
 
 eventHandler :: Glob.Pattern -> EventTypeHandler
